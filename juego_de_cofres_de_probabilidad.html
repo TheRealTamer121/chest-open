@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full select-none">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>El Desafío de los Cofres Legendarios</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        fantasy: ['Cinzel', 'serif'],
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Desactivar zoom por doble tap y comportamientos molestos en móviles */
+        html, body {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: none;
+            overflow-x: hidden;
+        }
+
+        body {
+            background: radial-gradient(circle at center, #111827 0%, #030712 100%);
+            color: #f3f4f6;
+        }
+
+        /* Animaciones para cofre */
+        @keyframes floatSlow {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-8px) rotate(0.5deg); }
+        }
+
+        @keyframes chestTouch {
+            0% { transform: scale(1); }
+            30% { transform: scale(0.9) rotate(-3deg); }
+            60% { transform: scale(1.08) rotate(3deg); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes goldFloat {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-60px) scale(1.3); }
+        }
+
+        @keyframes toastSlide {
+            0% { transform: translateY(-20px); opacity: 0; }
+            100% { transform: translateY(0); opacity: 1; }
+        }
+
+        .animate-float {
+            animation: floatSlow 3.5s ease-in-out infinite;
+        }
+
+        .animate-touch {
+            animation: chestTouch 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .gold-popup {
+            position: absolute;
+            animation: goldFloat 0.75s ease-out forwards;
+            pointer-events: none;
+            font-weight: 900;
+            z-index: 40;
+        }
+
+        .toast-animate {
+            animation: toastSlide 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+        ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 4px; }
+    </style>
+</head>
+<body class="h-full flex flex-col justify-between font-sans relative antialiased">
+
+    <!-- Fondo de Partículas -->
+    <div class="fixed inset-0 pointer-events-none z-0">
+        <canvas id="particleCanvas" class="w-full h-full opacity-30"></canvas>
+    </div>
+
+    <!-- Toast de Evento Aleatorio (Banner Superior) -->
+    <div id="eventToast" class="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md hidden toast-animate">
+        <div id="eventToastContent" class="px-4 py-3 rounded-2xl border backdrop-blur-md shadow-2xl flex items-center justify-between gap-3 text-xs sm:text-sm font-bold">
+            <div class="flex items-center gap-2.5">
+                <i id="eventToastIcon" class="text-xl"></i>
+                <span id="eventToastText"></span>
+            </div>
+            <button onclick="hideToast()" class="text-white/60 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+    </div>
+
+    <!-- Header Principal -->
+    <header class="relative z-10 pt-3 px-4 flex items-center justify-between max-w-6xl mx-auto w-full">
+        <!-- Título principal -->
+        <div class="flex items-center gap-2">
+            <i class="fa-solid fa-gem text-amber-400 text-xl sm:text-2xl"></i>
+            <h1 class="font-fantasy text-lg sm:text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 tracking-wider">
+                COFRES
+            </h1>
+        </div>
+
+        <!-- Barra de Oro de la Cuenta -->
+        <div class="flex items-center gap-2">
+            <div class="px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-yellow-500/60 shadow-[0_0_15px_rgba(234,179,8,0.2)] flex items-center gap-2">
+                <i class="fa-solid fa-coins text-yellow-400 text-base sm:text-lg animate-bounce"></i>
+                <span id="goldDisplay" class="font-fantasy text-base sm:text-xl font-black text-yellow-300">0</span>
+            </div>
+
+            <!-- Botón de Desarrollador (+1,000,000 Oro) -->
+            <button onclick="triggerDevCheat()" title="Modo Dev: +1M Oro" class="px-3 py-1.5 bg-purple-900/80 hover:bg-purple-800 border border-purple-400/80 rounded-full text-purple-200 text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 shadow-lg">
+                <i class="fa-solid fa-wand-magic-sparkles text-yellow-300"></i>
+                <span class="hidden sm:inline">DEV</span> +1M
+            </button>
+        </div>
+    </header>
+
+    <!-- Contenido Principal -->
+    <main class="relative z-10 flex-1 max-w-6xl w-full mx-auto px-3 py-2 flex flex-col lg:flex-row items-center lg:items-start justify-center gap-4 overflow-y-auto lg:overflow-visible">
+
+        <!-- PANEL JUEGO (Móvil Siempre Visible / Pestaña 'game') -->
+        <section id="viewGame" class="w-full flex-1 flex flex-col items-center justify-center relative min-h-[380px]">
+            
+            <!-- Resplandor ambiental -->
+            <div id="ambientGlow" class="absolute w-64 h-64 sm:w-80 sm:h-80 rounded-full bg-amber-600/20 blur-3xl pointer-events-none transition-all duration-500"></div>
+
+            <!-- Nivel e Indicador de Cofre -->
+            <div class="mb-1 flex flex-col items-center gap-1">
+                <div id="levelBadge" class="px-4 py-1 rounded-full bg-slate-900/90 border border-amber-500/50 text-amber-300 font-fantasy font-bold text-xs sm:text-sm tracking-wide shadow-lg flex items-center gap-2">
+                    <i class="fa-solid fa-shield-halved text-amber-400"></i>
+                    <span id="badgeText">NIVEL 1: MADERA</span>
+                </div>
+
+                <!-- Buff Activo flotante -->
+                <div id="activeBuffContent" class="hidden px-3 py-0.5 rounded-md bg-indigo-950/90 border border-indigo-400 text-indigo-200 text-[11px] font-semibold shadow-md animate-pulse flex items-center gap-1.5">
+                </div>
+            </div>
+
+            <!-- Cofre Interactivo (Contenedor Táctil) -->
+            <div id="chestWrapper" class="relative group cursor-pointer transition-transform duration-150 animate-float my-2 touch-manipulation" onclick="handleChestInteraction(event)">
+                <div id="chestContainer" class="w-56 h-56 sm:w-72 sm:h-72 relative flex items-center justify-center filter drop-shadow-[0_15px_20px_rgba(0,0,0,0.7)]">
+                    <!-- SVG del Cofre -->
+                </div>
+
+                <div class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-slate-900/90 border border-amber-500/40 px-3.5 py-1 rounded-full text-[11px] text-amber-200 font-semibold shadow-xl flex items-center gap-1.5 whitespace-nowrap">
+                    <i class="fa-solid fa-hand-pointer text-yellow-400"></i> Toca para Abrir (+1 Oro)
+                </div>
+            </div>
+
+            <!-- Feedback de Respuesta -->
+            <div id="feedbackMessage" class="h-6 mt-3 text-center font-bold text-xs sm:text-sm transition-all duration-300 opacity-0 transform translate-y-1">
+            </div>
+
+            <!-- Barra Resumen Rápida para Móviles -->
+            <div class="w-full max-w-xs mt-2 bg-slate-900/80 border border-slate-800 rounded-xl p-2.5 text-xs space-y-1">
+                <div class="flex justify-between items-baseline">
+                    <span class="text-slate-400 text-[10px] font-semibold uppercase">Probabilidad:</span>
+                    <span id="statProbability" class="font-bold text-emerald-400 text-sm">50%</span>
+                </div>
+                <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div id="probabilityBar" class="bg-emerald-500 h-full transition-all duration-300" style="width: 50%"></div>
+                </div>
+                <div class="flex justify-between text-[10px] text-slate-400 pt-0.5">
+                    <span>Siguiente: <b id="statNextTier" class="text-slate-200">Piedra</b></span>
+                    <span>Máx: <b id="statMaxLevel" class="text-amber-300">Madera</b></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pestaña / Drawer: TIENDA -->
+        <section id="viewShop" class="w-full lg:w-80 bg-slate-900/95 lg:bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl p-4 shadow-2xl hidden lg:block">
+            <h2 class="font-fantasy text-base sm:text-lg font-bold text-amber-400 mb-3 pb-2 border-b border-slate-700 flex items-center justify-between">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-store text-amber-500"></i> Tienda de Objetos</span>
+                <button class="lg:hidden text-slate-400 hover:text-white" onclick="switchTab('game')"><i class="fa-solid fa-xmark"></i></button>
+            </h2>
+
+            <div id="shopContainer" class="space-y-2.5 max-h-[60vh] lg:max-h-none overflow-y-auto pr-1">
+                <!-- Items de Tienda -->
+            </div>
+        </section>
+
+        <!-- Pestaña / Drawer: INVENTARIO -->
+        <section id="viewInventory" class="w-full lg:w-72 bg-slate-900/95 lg:bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl p-4 shadow-2xl hidden lg:block">
+            <h2 class="font-fantasy text-base sm:text-lg font-bold text-amber-400 mb-2 pb-2 border-b border-slate-700 flex items-center justify-between">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-box-archive text-amber-500"></i> Inventario</span>
+                <button class="lg:hidden text-slate-400 hover:text-white" onclick="switchTab('game')"><i class="fa-solid fa-xmark"></i></button>
+            </h2>
+            <p class="text-[10px] text-slate-400 mb-2">Toca un objeto para activarlo en tu próximo intento.</p>
+
+            <div id="inventoryContainer" class="grid grid-cols-2 gap-2 max-h-[50vh] lg:max-h-none overflow-y-auto">
+                <!-- Objetos del Inventario -->
+            </div>
+        </section>
+
+        <!-- Pestaña / Drawer: ESTADÍSTICAS E HISTORIAL -->
+        <section id="viewStats" class="w-full lg:w-72 bg-slate-900/95 lg:bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl p-4 shadow-2xl hidden lg:block">
+            <h2 class="font-fantasy text-base sm:text-lg font-bold text-amber-400 mb-3 pb-2 border-b border-slate-700 flex items-center justify-between">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-chart-line text-amber-500"></i> Registro</span>
+                <button class="lg:hidden text-slate-400 hover:text-white" onclick="switchTab('game')"><i class="fa-solid fa-xmark"></i></button>
+            </h2>
+
+            <div class="space-y-3">
+                <div class="grid grid-cols-2 gap-2 text-center text-xs">
+                    <div class="bg-slate-800/60 rounded-xl p-2 border border-slate-700/50">
+                        <span class="text-slate-400 text-[10px] block">Clicks Totales</span>
+                        <span id="statTotalClicks" class="font-fantasy font-bold text-base text-white">0</span>
+                    </div>
+                    <div class="bg-slate-800/60 rounded-xl p-2 border border-slate-700/50">
+                        <span class="text-slate-400 text-[10px] block">Nivel Máx</span>
+                        <span id="statCurrentLevel" class="font-bold text-xs text-amber-300">1 (Madera)</span>
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-700/60 pt-2">
+                    <span class="text-[11px] font-bold text-slate-300 block mb-1.5"><i class="fa-solid fa-scroll text-amber-500"></i> Historial Reciente</span>
+                    <div id="eventLog" class="h-36 overflow-y-auto space-y-1.5 text-xs pr-1">
+                        <div class="text-slate-500 italic text-center py-4">Haz clic para comenzar.</div>
+                    </div>
+                </div>
+
+                <button onclick="resetGame()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-rotate-right"></i> Reiniciar
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- NAV BAR INFERIOR (Solo Móviles) -->
+    <nav class="lg:hidden relative z-30 bg-slate-900/95 border-t border-slate-800 backdrop-blur-md px-2 py-1.5">
+        <div class="flex justify-around items-center max-w-md mx-auto">
+            <button onclick="switchTab('game')" id="nav-game" class="nav-btn flex flex-col items-center py-1 px-3 rounded-xl text-amber-400 font-bold text-[10px]">
+                <i class="fa-solid fa-cube text-lg mb-0.5"></i>
+                Cofre
+            </button>
+            <button onclick="switchTab('shop')" id="nav-shop" class="nav-btn flex flex-col items-center py-1 px-3 rounded-xl text-slate-400 font-semibold text-[10px]">
+                <i class="fa-solid fa-store text-lg mb-0.5"></i>
+                Tienda
+            </button>
+            <button onclick="switchTab('inventory')" id="nav-inventory" class="nav-btn flex flex-col items-center py-1 px-3 rounded-xl text-slate-400 font-semibold text-[10px] relative">
+                <i class="fa-solid fa-box-archive text-lg mb-0.5"></i>
+                Mochila
+                <span id="navInvBadge" class="hidden absolute top-0 right-2 w-2 h-2 rounded-full bg-indigo-500"></span>
+            </button>
+            <button onclick="switchTab('stats')" id="nav-stats" class="nav-btn flex flex-col items-center py-1 px-3 rounded-xl text-slate-400 font-semibold text-[10px]">
+                <i class="fa-solid fa-chart-simple text-lg mb-0.5"></i>
+                Stats
+            </button>
+        </div>
+    </nav>
+
+    <!-- Modal de Victoria (Diamante) -->
+    <div id="victoryModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-500 p-4">
+        <div class="bg-gradient-to-b from-slate-900 via-slate-800 to-cyan-950 border-2 border-cyan-400 rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-[0_0_50px_rgba(6,182,212,0.5)] transform scale-90 transition-all duration-500" id="victoryContent">
+            <div class="w-20 h-20 mx-auto mb-3 relative">
+                <div class="absolute inset-0 bg-cyan-400/30 rounded-full blur-xl animate-pulse"></div>
+                <i class="fa-solid fa-gem text-6xl text-cyan-300 relative z-10 drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]"></i>
+            </div>
+            
+            <h2 class="font-fantasy text-2xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-200 via-white to-cyan-400 mb-1">
+                ¡FELICIDADES!
+            </h2>
+            <p class="text-cyan-100 text-xs sm:text-sm mb-5">
+                ¡Has conseguido el legendario <span class="font-bold text-cyan-300">Cofre de Diamante</span>!
+            </p>
+
+            <div class="bg-slate-900/80 rounded-xl p-3 border border-cyan-500/30 mb-5 text-left text-xs space-y-1.5 text-slate-300">
+                <div class="flex justify-between">
+                    <span>Clicks Totales:</span>
+                    <span id="modalTotalClicks" class="font-bold text-cyan-300">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Oro Acumulado:</span>
+                    <span id="modalTotalGold" class="font-bold text-yellow-300">0</span>
+                </div>
+            </div>
+
+            <button onclick="closeVictoryModal()" class="w-full py-3 px-6 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-fantasy font-bold rounded-xl shadow-lg transition-all active:scale-95 text-sm">
+                ¡JUGAR DE NUEVO!
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURACIÓN Y COFRES ---
+        const CHEST_TYPES = {
+            WOOD: {
+                id: 'wood', level: 1, name: 'Cofre de Madera', nextName: 'Piedra', probSuccess: 0.50,
+                glowColor: 'rgba(180, 83, 9, 0.25)', dotColor: 'bg-amber-700',
+                svg: `<svg viewBox="0 0 200 200" class="w-full h-full"><rect x="35" y="85" width="130" height="80" rx="8" fill="#5c2c16" stroke="#2d1408" stroke-width="4"/><path d="M30 88 C30 50, 170 50, 170 88 Z" fill="#7a3a1d" stroke="#2d1408" stroke-width="4"/><path d="M45 100 L45 155 M155 100 L155 155 M100 100 L100 155" stroke="#421e0f" stroke-width="2" stroke-dasharray="8 4"/><rect x="50" y="85" width="16" height="80" fill="#3a3d40" stroke="#1a1c1e" stroke-width="2"/><rect x="134" y="85" width="16" height="80" fill="#3a3d40" stroke="#1a1c1e" stroke-width="2"/><path d="M30 80 L170 80 L170 88 L30 88 Z" fill="#4a4d50" stroke="#1a1c1e" stroke-width="2"/><rect x="88" y="80" width="24" height="32" rx="4" fill="#d97706" stroke="#78350f" stroke-width="2"/><circle cx="100" cy="92" r="4" fill="#451a03"/><path d="M100 94 L100 104" stroke="#451a03" stroke-width="3"/></svg>`
+            },
+            STONE: {
+                id: 'stone', level: 2, name: 'Cofre de Piedra', nextName: 'Hierro', probSuccess: 0.25,
+                glowColor: 'rgba(148, 163, 184, 0.25)', dotColor: 'bg-slate-400',
+                svg: `<svg viewBox="0 0 200 200" class="w-full h-full"><rect x="35" y="85" width="130" height="80" rx="6" fill="#475569" stroke="#1e293b" stroke-width="4"/><path d="M30 88 C35 45, 165 45, 170 88 Z" fill="#64748b" stroke="#1e293b" stroke-width="4"/><rect x="48" y="85" width="20" height="80" fill="#334155" stroke="#0f172a" stroke-width="2"/><rect x="132" y="85" width="20" height="80" fill="#334155" stroke="#0f172a" stroke-width="2"/><rect x="86" y="78" width="28" height="34" rx="6" fill="#1e293b" stroke="#94a3b8" stroke-width="2"/><polygon points="100,85 106,98 94,98" fill="#38bdf8"/></svg>`
+            },
+            IRON: {
+                id: 'iron', level: 3, name: 'Cofre de Hierro', nextName: 'Oro', probSuccess: 0.125,
+                glowColor: 'rgba(212, 212, 216, 0.3)', dotColor: 'bg-zinc-300',
+                svg: `<svg viewBox="0 0 200 200" class="w-full h-full"><rect x="35" y="85" width="130" height="80" rx="4" fill="#3f3f46" stroke="#18181b" stroke-width="4"/><path d="M30 88 L50 50 L150 50 L170 88 Z" fill="#52525b" stroke="#18181b" stroke-width="4"/><rect x="60" y="50" width="16" height="115" fill="#27272a" stroke="#18181b" stroke-width="2"/><rect x="124" y="50" width="16" height="115" fill="#27272a" stroke="#18181b" stroke-width="2"/><circle cx="100" cy="95" r="18" fill="#18181b" stroke="#a1a1aa" stroke-width="3"/><path d="M96 90 L104 90 L102 102 L98 102 Z" fill="#e4e4e7"/></svg>`
+            },
+            GOLD: {
+                id: 'gold', level: 4, name: 'Cofre de Oro', nextName: 'Diamante', probSuccess: 0.0625,
+                glowColor: 'rgba(234, 179, 8, 0.4)', dotColor: 'bg-yellow-400',
+                svg: `<svg viewBox="0 0 200 200" class="w-full h-full"><circle cx="100" cy="100" r="75" fill="#facc15" opacity="0.15" filter="blur(10px)"/><rect x="35" y="85" width="130" height="80" rx="6" fill="#ca8a04" stroke="#713f12" stroke-width="4"/><path d="M30 88 C30 40, 170 40, 170 88 Z" fill="#eab308" stroke="#713f12" stroke-width="4"/><rect x="52" y="85" width="18" height="80" fill="#a16207" stroke="#713f12" stroke-width="2"/><rect x="130" y="85" width="18" height="80" fill="#a16207" stroke="#713f12" stroke-width="2"/><path d="M88 78 L112 78 L116 112 L100 122 L84 112 Z" fill="#713f12" stroke="#fef08a" stroke-width="2"/><circle cx="100" cy="94" r="7" fill="#dc2626" stroke="#fef08a" stroke-width="1.5"/></svg>`
+            },
+            DIAMOND: {
+                id: 'diamond', level: 5, name: 'Cofre de Diamante', nextName: '¡MÁXIMO!', probSuccess: 0.0,
+                glowColor: 'rgba(6, 182, 212, 0.6)', dotColor: 'bg-cyan-300',
+                svg: `<svg viewBox="0 0 200 200" class="w-full h-full"><circle cx="100" cy="100" r="85" fill="#22d3ee" opacity="0.25" filter="blur(15px)"/><rect x="35" y="85" width="130" height="80" rx="8" fill="#0891b2" stroke="#cffafe" stroke-width="3"/><path d="M30 88 L60 42 L140 42 L170 88 Z" fill="#06b6d4" stroke="#cffafe" stroke-width="3"/><polygon points="60,42 100,68 140,42" fill="#ecfeff" opacity="0.7"/><polygon points="100,78 115,93 100,108 85,93" fill="#ffffff" stroke="#22d3ee" stroke-width="2"/></svg>`
+            }
+        };
+
+        const ITEMS = {
+            lockpick: { id: 'lockpick', name: 'Ganzúa', price: 500, icon: 'fa-wrench', color: 'text-amber-400', desc: '+10% prob. en siguiente click' },
+            time_clock: { id: 'time_clock', name: 'Reloj de Tiempo', price: 10000, icon: 'fa-hourglass-half', color: 'text-sky-400', desc: 'Regresa al nivel más alto alcanzado' },
+            key: { id: 'key', name: 'Llave', price: 100000, icon: 'fa-key', color: 'text-yellow-400', desc: '100% de éxito en siguiente click' },
+            bet_chip: { id: 'bet_chip', name: 'Ficha de Apuesta', price: 10, icon: 'fa-poker-chip', color: 'text-purple-400', desc: '0.1% de saltar directo a Diamante' }
+        };
+
+        // --- ESTADO ---
+        let currentChest = CHEST_TYPES.WOOD;
+        let gold = 0;
+        let totalClicks = 0;
+        let maxLevelReached = 1;
+        let isProcessing = false;
+        let activeBuff = null;
+
+        let inventory = { lockpick: 0, time_clock: 0, key: 0, bet_chip: 0 };
+
+        // --- INICIALIZACIÓN ---
+        window.onload = function() {
+            initParticles();
+            renderShop();
+            updateUI();
+        };
+
+        // --- BOTÓN CHEAT DE DESARROLLADOR ---
+        function triggerDevCheat() {
+            gold += 1000000;
+            triggerHaptic();
+            showToast('fa-solid fa-wand-magic-sparkles', 'text-yellow-400', 'bg-purple-950 border-purple-500 text-purple-200', '¡Modo Dev: +1,000,000 Oro añadido!');
+            updateUI();
+        }
+
+        // --- INTERACCIÓN Y LÓGICA DE COFRE ---
+        function handleChestInteraction(event) {
+            if (isProcessing) return;
+
+            if (currentChest.id === 'diamond') {
+                showVictory();
+                return;
+            }
+
+            isProcessing = true;
+            totalClicks++;
+            gold += 1; // +1 Oro por clic
+            
+            triggerHaptic();
+            spawnGoldParticle(event);
+
+            // Animación
+            chestWrapper.classList.remove('animate-touch');
+            void chestWrapper.offsetWidth;
+            chestWrapper.classList.add('animate-touch');
+
+            // --- EVALUAR EVENTOS ALEATORIOS AL HACER CLIC (15% Probabilidad) ---
+            const triggerEvent = Math.random() < 0.15;
+            if (triggerEvent) {
+                handleRandomEvent();
+            }
+
+            // --- LÓGICA DE PROBABILIDAD DE COFRE ---
+            let baseProb = currentChest.probSuccess;
+            let finalProb = baseProb;
+            let specialJumpToDiamond = false;
+            let usedBuff = activeBuff;
+
+            if (activeBuff) {
+                inventory[activeBuff]--;
+                if (activeBuff === 'key') finalProb = 1.0;
+                else if (activeBuff === 'lockpick') finalProb = Math.min(1.0, baseProb + 0.10);
+                else if (activeBuff === 'bet_chip') { finalProb = 0.001; specialJumpToDiamond = true; }
+                activeBuff = null;
+            }
+
+            const random = Math.random();
+            const isSuccess = random < finalProb;
+            const previousChest = currentChest;
+
+            if (isSuccess) {
+                if (specialJumpToDiamond) {
+                    currentChest = CHEST_TYPES.DIAMOND;
+                } else {
+                    if (currentChest.id === 'wood') currentChest = CHEST_TYPES.STONE;
+                    else if (currentChest.id === 'stone') currentChest = CHEST_TYPES.IRON;
+                    else if (currentChest.id === 'iron') currentChest = CHEST_TYPES.GOLD;
+                    else if (currentChest.id === 'gold') currentChest = CHEST_TYPES.DIAMOND;
+                }
+
+                if (currentChest.level > maxLevelReached) maxLevelReached = currentChest.level;
+
+                showFeedback(`¡ÉXITO! Avanzaste a ${currentChest.name}`, 'success');
+                addLogEntry(previousChest, currentChest, true, random, finalProb, usedBuff);
+
+                if (currentChest.id === 'diamond') setTimeout(() => showVictory(), 300);
+            } else {
+                const returnedToWood = currentChest.id !== 'wood';
+                currentChest = CHEST_TYPES.WOOD;
+                
+                if (returnedToWood) showFeedback(`¡FALLO! Regresaste al Cofre de Madera`, 'fail');
+                else showFeedback(`Continúas en Madera`, 'neutral');
+
+                addLogEntry(previousChest, currentChest, false, random, finalProb, usedBuff);
+            }
+
+            setTimeout(() => {
+                updateUI();
+                isProcessing = false;
+            }, 180);
+        }
+
+        // --- SISTEMA DE EVENTOS ALEATORIOS ---
+        function handleRandomEvent() {
+            const events = ['lose_gold', 'gain_gold', 'free_item', 'level_up'];
+            const chosen = events[Math.floor(Math.random() * events.length)];
+
+            switch(chosen) {
+                case 'lose_gold':
+                    const lost = Math.min(gold, 10);
+                    gold -= lost;
+                    showToast('fa-solid fa-coins', 'text-rose-400', 'bg-rose-950/90 border-rose-500 text-rose-200', `¡Evento! Perdiste ${lost} de oro.`);
+                    break;
+
+                case 'gain_gold':
+                    gold += 10;
+                    showToast('fa-solid fa-sack-dollar', 'text-emerald-400', 'bg-emerald-950/90 border-emerald-500 text-emerald-200', '¡Mala o buena suerte! Ganaste +10 de oro extra.');
+                    break;
+
+                case 'free_item':
+                    // Excluye la Llave (key)
+                    const eligibleItems = ['lockpick', 'time_clock', 'bet_chip'];
+                    const randomItemKey = eligibleItems[Math.floor(Math.random() * eligibleItems.length)];
+                    inventory[randomItemKey]++;
+                    const itemObj = ITEMS[randomItemKey];
+                    showToast('fa-solid fa-gift', 'text-amber-400', 'bg-amber-950/90 border-amber-500 text-amber-200', `¡Botín Sorpresa! Obtuviste un(a) ${itemObj.name} GRATIS.`);
+                    break;
+
+                case 'level_up':
+                    if (currentChest.id !== 'diamond') {
+                        if (currentChest.id === 'wood') currentChest = CHEST_TYPES.STONE;
+                        else if (currentChest.id === 'stone') currentChest = CHEST_TYPES.IRON;
+                        else if (currentChest.id === 'iron') currentChest = CHEST_TYPES.GOLD;
+                        else if (currentChest.id === 'gold') currentChest = CHEST_TYPES.DIAMOND;
+
+                        if (currentChest.level > maxLevelReached) maxLevelReached = currentChest.level;
+                        showToast('fa-solid fa-bolt-lightning', 'text-cyan-300', 'bg-cyan-950/90 border-cyan-400 text-cyan-100', `¡Bendición! El cofre subió directamente a ${currentChest.name}.`);
+                    }
+                    break;
+            }
+        }
+
+        // --- BANNERS / TOAST DE NOTIFICACIÓN ---
+        function showToast(icon, iconColor, bgStyle, text) {
+            const toast = document.getElementById('eventToast');
+            const content = document.getElementById('eventToastContent');
+            const toastIcon = document.getElementById('eventToastIcon');
+            const toastText = document.getElementById('eventToastText');
+
+            toastIcon.className = `${icon} ${iconColor} text-lg`;
+            content.className = `px-4 py-3 rounded-2xl border backdrop-blur-md shadow-2xl flex items-center justify-between gap-3 text-xs sm:text-sm font-bold ${bgStyle}`;
+            toastText.textContent = text;
+
+            toast.classList.remove('hidden');
+            setTimeout(() => hideToast(), 3000);
+        }
+
+        function hideToast() {
+            document.getElementById('eventToast').classList.add('hidden');
+        }
+
+        // --- TIENDA E INVENTARIO ---
+        function renderShop() {
+            const container = document.getElementById('shopContainer');
+            container.innerHTML = '';
+
+            Object.values(ITEMS).forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'bg-slate-800/80 border border-slate-700/80 rounded-xl p-2.5 flex items-center justify-between gap-2';
+                card.innerHTML = `
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0">
+                            <i class="fa-solid ${item.icon} ${item.color} text-sm"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="font-bold text-xs text-slate-200 truncate">${item.name}</div>
+                            <div class="text-[9px] text-slate-400 truncate">${item.desc}</div>
+                        </div>
+                    </div>
+                    <button onclick="buyItem('${item.id}')" id="btn-buy-${item.id}" class="shrink-0 py-1.5 px-2.5 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 text-white font-bold text-[11px] rounded-lg shadow flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                        <i class="fa-solid fa-coins text-[9px]"></i> ${item.price.toLocaleString()}
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function buyItem(itemId) {
+            const item = ITEMS[itemId];
+            if (gold >= item.price) {
+                gold -= item.price;
+                inventory[itemId]++;
+                triggerHaptic();
+                showFeedback(`Compraste ${item.name}`, 'success');
+                updateUI();
+            } else {
+                showFeedback('Oro insuficiente', 'fail');
+            }
+        }
+
+        function renderInventory() {
+            const container = document.getElementById('inventoryContainer');
+            const badge = document.getElementById('navInvBadge');
+            container.innerHTML = '';
+            let totalItems = 0;
+
+            Object.entries(inventory).forEach(([itemId, qty]) => {
+                if (qty > 0) {
+                    totalItems += qty;
+                    const item = ITEMS[itemId];
+                    const isSelected = activeBuff === itemId;
+
+                    const card = document.createElement('div');
+                    card.className = `p-2 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                        isSelected 
+                        ? 'bg-indigo-900/90 border-indigo-400 shadow-md scale-[1.02]' 
+                        : 'bg-slate-800/80 border-slate-700'
+                    }`;
+                    card.onclick = () => useInventoryItem(itemId);
+
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <i class="fa-solid ${item.icon} ${item.color} text-sm"></i>
+                            <span class="bg-slate-900 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-amber-300">x${qty}</span>
+                        </div>
+                        <div class="mt-1 font-bold text-[10px] text-slate-200 truncate">${item.name}</div>
+                        <div class="text-[8px] ${isSelected ? 'text-indigo-200 font-semibold' : 'text-slate-400'}">
+                            ${isSelected ? 'Activo ✓' : 'Toca p/ usar'}
+                        </div>
+                    `;
+                    container.appendChild(card);
+                }
+            });
+
+            if (totalItems === 0) {
+                container.innerHTML = `<div class="col-span-2 text-center py-4 text-slate-500 text-xs italic">Mochila vacía.</div>`;
+                badge.classList.add('hidden');
+            } else {
+                badge.classList.remove('hidden');
+            }
+        }
+
+        function useInventoryItem(itemId) {
+            if (!inventory[itemId] || inventory[itemId] <= 0) return;
+
+            if (itemId === 'time_clock') {
+                const maxChestObj = Object.values(CHEST_TYPES).find(c => c.level === maxLevelReached);
+                if (maxChestObj && currentChest.level < maxLevelReached) {
+                    inventory[itemId]--;
+                    currentChest = maxChestObj;
+                    showFeedback(`¡Regresaste a ${maxChestObj.name}!`, 'success');
+                    updateUI();
+                } else {
+                    showFeedback(`Ya estás en tu nivel máximo`, 'neutral');
+                }
+                return;
+            }
+
+            activeBuff = (activeBuff === itemId) ? null : itemId;
+            triggerHaptic();
+            updateUI();
+        }
+
+        // --- NAVEGACIÓN POR PESTAÑAS (MÓVIL) ---
+        function switchTab(tabName) {
+            const views = ['Game', 'Shop', 'Inventory', 'Stats'];
+            
+            views.forEach(v => {
+                const el = document.getElementById(`view${v}`);
+                const navBtn = document.getElementById(`nav-${v.toLowerCase()}`);
+
+                if (v.toLowerCase() === tabName) {
+                    el.classList.remove('hidden');
+                    if (navBtn) {
+                        navBtn.classList.add('text-amber-400', 'font-bold');
+                        navBtn.classList.remove('text-slate-400');
+                    }
+                } else {
+                    if (window.innerWidth < 1024) el.classList.add('hidden');
+                    if (navBtn) {
+                        navBtn.classList.remove('text-amber-400', 'font-bold');
+                        navBtn.classList.add('text-slate-400');
+                    }
+                }
+            });
+        }
+
+        // --- ACTUALIZACIÓN DE UI ---
+        function updateUI() {
+            document.getElementById('goldDisplay').textContent = gold.toLocaleString();
+            document.getElementById('statTotalClicks').textContent = totalClicks;
+
+            document.getElementById('chestContainer').innerHTML = currentChest.svg;
+            document.getElementById('badgeText').textContent = `NIVEL ${currentChest.level}: ${currentChest.name.toUpperCase()}`;
+            document.getElementById('ambientGlow').style.backgroundColor = currentChest.glowColor;
+
+            let displayProb = currentChest.probSuccess;
+            if (activeBuff === 'key') displayProb = 1.0;
+            else if (activeBuff === 'lockpick') displayProb = Math.min(1.0, currentChest.probSuccess + 0.10);
+            else if (activeBuff === 'bet_chip') displayProb = 0.001;
+
+            const probPercent = (displayProb * 100).toFixed(displayProb < 0.01 ? 1 : 0);
+            
+            if (currentChest.id === 'diamond') {
+                document.getElementById('statProbability').textContent = '100%';
+                document.getElementById('statNextTier').textContent = 'COMPLETADO';
+                document.getElementById('probabilityBar').style.width = '100%';
+            } else {
+                document.getElementById('statProbability').textContent = `${probPercent}%`;
+                document.getElementById('statNextTier').textContent = activeBuff === 'bet_chip' ? 'Diamante' : currentChest.nextName;
+                document.getElementById('probabilityBar').style.width = `${Math.min(100, Math.max(5, displayProb * 100))}%`;
+            }
+
+            const maxChestObj = Object.values(CHEST_TYPES).find(c => c.level === maxLevelReached);
+            document.getElementById('statCurrentLevel').textContent = `${maxLevelReached} (${maxChestObj ? maxChestObj.name.replace('Cofre de ', '') : 'Madera'})`;
+            document.getElementById('statMaxLevel').textContent = maxChestObj ? maxChestObj.name.replace('Cofre de ', '') : 'Madera';
+
+            Object.values(ITEMS).forEach(item => {
+                const btn = document.getElementById(`btn-buy-${item.id}`);
+                if (btn) btn.disabled = gold < item.price;
+            });
+
+            const activeBuffContent = document.getElementById('activeBuffContent');
+            if (activeBuff) {
+                const item = ITEMS[activeBuff];
+                activeBuffContent.innerHTML = `<i class="fa-solid ${item.icon}"></i> Buff: ${item.name}`;
+                activeBuffContent.classList.remove('hidden');
+            } else {
+                activeBuffContent.classList.add('hidden');
+            }
+
+            renderInventory();
+        }
+
+        // --- FEEDBACK HÁPTICO Y VISUAL ---
+        function triggerHaptic() {
+            if (navigator.vibrate) navigator.vibrate(20);
+        }
+
+        function spawnGoldParticle(e) {
+            const popup = document.createElement('div');
+            popup.className = 'gold-popup font-fantasy text-xs sm:text-sm text-yellow-300 drop-shadow-[0_0_6px_rgba(234,179,8,0.8)]';
+            popup.textContent = '+1 Oro';
+
+            const rect = chestWrapper.getBoundingClientRect();
+            const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+            const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+
+            popup.style.left = `${x || 50}px`;
+            popup.style.top = `${y || 50}px`;
+
+            chestWrapper.appendChild(popup);
+            setTimeout(() => popup.remove(), 750);
+        }
+
+        function showFeedback(text, type) {
+            const msg = document.getElementById('feedbackMessage');
+            msg.textContent = text;
+            msg.className = 'h-6 mt-3 text-center font-bold text-xs sm:text-sm transition-all duration-300 opacity-100 translate-y-0 ';
+
+            if (type === 'success') msg.classList.add('text-emerald-400');
+            else if (type === 'fail') msg.classList.add('text-rose-400');
+            else msg.classList.add('text-slate-400');
+
+            setTimeout(() => msg.classList.add('opacity-0', 'translate-y-1'), 1500);
+        }
+
+        function addLogEntry(fromChest, toChest, success, roll, threshold, usedBuff) {
+            const log = document.getElementById('eventLog');
+            if (log.children.length === 1 && log.children[0].classList.contains('italic')) log.innerHTML = '';
+
+            const entry = document.createElement('div');
+            entry.className = `p-1.5 rounded-lg border text-[10px] flex flex-col ${
+                success ? 'bg-emerald-950/40 border-emerald-700/50 text-emerald-200' : 'bg-rose-950/30 border-rose-800/40 text-rose-200'
+            }`;
+
+            entry.innerHTML = `
+                <div class="flex justify-between font-semibold">
+                    <span>${success ? '✓ Éxito' : '✗ Fallo'}</span>
+                    <span class="opacity-50">#${totalClicks}</span>
+                </div>
+                <div>${fromChest.name} &rarr; <b>${toChest.name}</b></div>
+            `;
+
+            log.insertBefore(entry, log.firstChild);
+            if (log.children.length > 15) log.removeChild(log.lastChild);
+        }
+
+        function showVictory() {
+            document.getElementById('modalTotalClicks').textContent = totalClicks;
+            document.getElementById('modalTotalGold').textContent = gold.toLocaleString();
+            document.getElementById('victoryModal').classList.remove('opacity-0', 'pointer-events-none');
+            document.getElementById('victoryContent').classList.remove('scale-90');
+            confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+        }
+
+        function closeVictoryModal() {
+            document.getElementById('victoryModal').classList.add('opacity-0', 'pointer-events-none');
+            resetGame();
+        }
+
+        function resetGame() {
+            currentChest = CHEST_TYPES.WOOD;
+            gold = 0;
+            totalClicks = 0;
+            maxLevelReached = 1;
+            activeBuff = null;
+            inventory = { lockpick: 0, time_clock: 0, key: 0, bet_chip: 0 };
+            document.getElementById('eventLog').innerHTML = `<div class="text-slate-500 italic text-center py-4">Reinicio completado.</div>`;
+            updateUI();
+        }
+
+        function initParticles() {
+            const canvas = document.getElementById('particleCanvas');
+            const ctx = canvas.getContext('2d');
+            function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+            resize(); window.addEventListener('resize', resize);
+
+            const particles = Array.from({ length: 25 }, () => ({
+                x: Math.random() * canvas.width, y: Math.random() * canvas.height,
+                size: Math.random() * 2 + 0.5, speedY: -0.2 - Math.random() * 0.3,
+                opacity: Math.random() * 0.5 + 0.2
+            }));
+
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                particles.forEach(p => {
+                    p.y += p.speedY;
+                    if (p.y < 0) p.y = canvas.height;
+                    ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+                });
+                requestAnimationFrame(animate);
+            }
+            animate();
+        }
+    </script>
+</body>
+</html>
